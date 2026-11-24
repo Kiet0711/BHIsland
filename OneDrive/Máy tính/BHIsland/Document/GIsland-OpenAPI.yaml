@@ -1,0 +1,514 @@
+openapi: 3.1.0
+info:
+  title: GIsland API
+  version: 1.0.0
+  description: REST API cho mạng xã hội cộng đồng chơi mọi loại phương tiện.
+servers:
+  - url: /api/v1
+tags:
+  - name: Auth
+  - name: Users
+  - name: Vehicles
+  - name: Media
+  - name: Posts
+  - name: Social
+  - name: Moderation
+  - name: Notifications
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Đăng ký tài khoản
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RegisterRequest'}
+      responses:
+        '201':
+          description: Đã tạo tài khoản; email xác minh được gửi nếu địa chỉ hợp lệ
+          content: {application/json: {schema: {$ref: '#/components/schemas/RegisterAccepted'}}}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /auth/verify-email:
+    post:
+      tags: [Auth]
+      summary: Xác minh email bằng token một lần
+      operationId: verifyEmail
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/VerifyEmailRequest'}}}
+      responses:
+        '204': {description: Email đã được xác minh}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Đăng nhập và đặt session cookie
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LoginRequest'}
+      responses:
+        '200':
+          description: Đăng nhập thành công; session được đặt bằng cookie HttpOnly
+          headers:
+            Set-Cookie: {schema: {type: string}, description: 'Cookie gisland_session với HttpOnly, Secure, SameSite=Lax'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/LoginResponse'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Yêu cầu đặt lại mật khẩu
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ForgotPasswordRequest'}}}
+      responses:
+        '202':
+          description: Luôn trả phản hồi chung để tránh dò email
+          content: {application/json: {schema: {$ref: '#/components/schemas/GenericAccepted'}}}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Đặt mật khẩu mới bằng token một lần
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ResetPasswordRequest'}}}
+      responses: {'204': {description: Mật khẩu đã đổi và các session cũ đã thu hồi}, '422': {$ref: '#/components/responses/ValidationError'}, '429': {$ref: '#/components/responses/RateLimited'}}
+  /auth/logout:
+    post:
+      tags: [Auth]
+      security: [{sessionCookie: []}]
+      responses: {'204': {description: Session đã thu hồi}}
+  /me:
+    get:
+      tags: [Users]
+      security: [{sessionCookie: []}]
+      responses: {'200': {description: Hồ sơ của người đăng nhập, content: {application/json: {schema: {$ref: '#/components/schemas/MyProfile'}}}}}
+    patch:
+      tags: [Users]
+      security: [{sessionCookie: []}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ProfilePatch'}}}
+      responses: {'200': {description: Hồ sơ đã cập nhật, content: {application/json: {schema: {$ref: '#/components/schemas/MyProfile'}}}}, '422': {$ref: '#/components/responses/ValidationError'}}
+  /users/{username}:
+    get:
+      tags: [Users]
+      parameters: [{in: path, name: username, required: true, schema: {type: string}}]
+      responses: {'200': {description: Hồ sơ công khai, content: {application/json: {schema: {$ref: '#/components/schemas/PublicProfile'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
+  /vehicle-types:
+    get:
+      tags: [Vehicles]
+      summary: Danh mục loại phương tiện đang hoạt động
+      operationId: listVehicleTypes
+      responses:
+        '200':
+          description: Danh mục theo sortOrder
+          content: {application/json: {schema: {$ref: '#/components/schemas/VehicleTypeList'}}}
+  /me/vehicles:
+    get:
+      tags: [Vehicles]
+      security: [{sessionCookie: []}]
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}]
+      responses: {'200': {description: Gara của tôi, content: {application/json: {schema: {$ref: '#/components/schemas/VehicleList'}}}}}
+    post:
+      tags: [Vehicles]
+      security: [{sessionCookie: []}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/VehicleInput'}}}
+      responses: {'201': {description: Đã tạo phương tiện, content: {application/json: {schema: {$ref: '#/components/schemas/Vehicle'}}}}, '422': {$ref: '#/components/responses/ValidationError'}}
+  /vehicles/{vehicleId}:
+    get:
+      tags: [Vehicles]
+      parameters: [{in: path, name: vehicleId, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Phương tiện, content: {application/json: {schema: {$ref: '#/components/schemas/Vehicle'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
+    patch:
+      tags: [Vehicles]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: vehicleId, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/VehiclePatch'}}}}
+      responses: {'200': {description: Đã cập nhật, content: {application/json: {schema: {$ref: '#/components/schemas/Vehicle'}}}}, '404': {$ref: '#/components/responses/NotFound'}, '422': {$ref: '#/components/responses/ValidationError'}}
+    delete:
+      tags: [Vehicles]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: vehicleId, required: true, schema: {type: string, format: uuid}}]
+      responses: {'204': {description: Đã xóa mềm}, '404': {$ref: '#/components/responses/NotFound'}}
+  /media/upload-intents:
+    post:
+      tags: [Media]
+      security: [{sessionCookie: []}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [filename, mimeType, byteSize], properties: {filename: {type: string, maxLength: 200}, mimeType: {type: string, enum: [image/jpeg, image/png, image/webp, image/avif]}, byteSize: {type: integer, minimum: 1, maximum: 15728640}, checksum: {type: string}}}}}
+      responses:
+        '201':
+          description: URL upload tạm, headers cần gửi và media đang pending
+          content: {application/json: {schema: {$ref: '#/components/schemas/MediaUploadIntent'}}}
+        '413': {description: Tệp vượt giới hạn}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /media/{mediaId}/complete:
+    post:
+      tags: [Media]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: mediaId, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: Upload được kiểm tra, chuyển WebP và sẵn sàng sử dụng
+          content: {application/json: {schema: {$ref: '#/components/schemas/MediaStatus'}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /media/{mediaId}/upload:
+    put:
+      tags: [Media]
+      summary: Tải bytes ảnh lên vùng tạm
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: mediaId, required: true, schema: {type: string, format: uuid}}]
+      requestBody:
+        required: true
+        content:
+          image/jpeg: {schema: {type: string, format: binary}}
+          image/png: {schema: {type: string, format: binary}}
+          image/webp: {schema: {type: string, format: binary}}
+          image/avif: {schema: {type: string, format: binary}}
+      responses: {'204': {description: Bytes đã tải vào vùng tạm}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '413': {description: Tệp vượt giới hạn}, '422': {$ref: '#/components/responses/ValidationError'}}
+  /media/{mediaId}/content:
+    get:
+      tags: [Media]
+      summary: Lấy ảnh đã xử lý nếu người xem có quyền
+      parameters: [{in: path, name: mediaId, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Ảnh WebP đã loại metadata, content: {image/webp: {schema: {type: string, format: binary}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /posts:
+    get:
+      tags: [Posts]
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}, {in: query, name: vehicleType, schema: {type: string}}, {in: query, name: tag, schema: {type: string}}]
+      responses: {'200': {description: Feed khám phá, content: {application/json: {schema: {$ref: '#/components/schemas/PostList'}}}}}
+    post:
+      tags: [Posts]
+      security: [{sessionCookie: []}]
+      parameters: [{in: header, name: Idempotency-Key, required: false, schema: {type: string, maxLength: 128}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PostInput'}}}}
+      responses: {'201': {description: Bài đăng đã tạo, content: {application/json: {schema: {$ref: '#/components/schemas/Post'}}}}, '422': {$ref: '#/components/responses/ValidationError'}}
+  /posts/{postId}:
+    get:
+      tags: [Posts]
+      parameters: [{in: path, name: postId, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Bài đăng, content: {application/json: {schema: {$ref: '#/components/schemas/Post'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
+    patch:
+      tags: [Posts]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: postId, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PostInput'}}}}
+      responses: {'200': {description: Đã cập nhật}, '403': {$ref: '#/components/responses/Forbidden'}}
+    delete:
+      tags: [Posts]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: postId, required: true, schema: {type: string, format: uuid}}]
+      responses: {'204': {description: Đã xóa mềm}}
+  /posts/{postId}/like:
+    put:
+      tags: [Social]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: postId, required: true, schema: {type: string, format: uuid}}]
+      responses: {'204': {description: Đã thích (idempotent)}}
+    delete:
+      tags: [Social]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: postId, required: true, schema: {type: string, format: uuid}}]
+      responses: {'204': {description: Đã bỏ thích}}
+  /posts/{postId}/save:
+    put:
+      tags: [Social]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: postId, required: true, schema: {type: string, format: uuid}}]
+      responses: {'204': {description: Đã lưu bài}}
+    delete:
+      tags: [Social]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: postId, required: true, schema: {type: string, format: uuid}}]
+      responses: {'204': {description: Đã bỏ lưu}}
+  /posts/{postId}/comments:
+    get:
+      tags: [Social]
+      parameters: [{in: path, name: postId, required: true, schema: {type: string, format: uuid}}, {$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}]
+      responses: {'200': {description: Bình luận theo thứ tự thời gian}}
+    post:
+      tags: [Social]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: postId, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [body], properties: {body: {type: string, minLength: 1, maxLength: 2000}, parentId: {type: [string, 'null'], format: uuid}}}}}}
+      responses: {'201': {description: Đã tạo bình luận}, '422': {$ref: '#/components/responses/ValidationError'}}
+  /comments/{commentId}:
+    patch:
+      tags: [Social]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: commentId, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [body], properties: {body: {type: string, minLength: 1, maxLength: 2000}}}}}}
+      responses: {'200': {description: Bình luận đã cập nhật}, '403': {$ref: '#/components/responses/Forbidden'}}
+    delete:
+      tags: [Social]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: commentId, required: true, schema: {type: string, format: uuid}}]
+      responses: {'204': {description: Bình luận đã xóa mềm}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /users/{userId}/follow:
+    put:
+      tags: [Social]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: userId, required: true, schema: {type: string, format: uuid}}]
+      responses: {'204': {description: Đang theo dõi}}
+    delete:
+      tags: [Social]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: userId, required: true, schema: {type: string, format: uuid}}]
+      responses: {'204': {description: Đã bỏ theo dõi}}
+  /users/{userId}/block:
+    put:
+      tags: [Social]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: userId, required: true, schema: {type: string, format: uuid}}]
+      responses: {'204': {description: Đã chặn; áp dụng cho feed, profile, search và tương tác}}
+    delete:
+      tags: [Social]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: userId, required: true, schema: {type: string, format: uuid}}]
+      responses: {'204': {description: Đã bỏ chặn}}
+  /feed/following:
+    get:
+      tags: [Posts]
+      security: [{sessionCookie: []}]
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}]
+      responses: {'200': {description: Feed theo dõi, content: {application/json: {schema: {$ref: '#/components/schemas/PostList'}}}}}
+  /search:
+    get:
+      tags: [Posts, Users, Vehicles]
+      parameters: [{in: query, name: q, required: true, schema: {type: string, minLength: 2, maxLength: 100}}, {in: query, name: type, schema: {type: string, enum: [all, users, posts, vehicles]}}, {$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}]
+      responses: {'200': {description: Kết quả tìm kiếm}}
+  /reports:
+    post:
+      tags: [Moderation]
+      security: [{sessionCookie: []}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [targetType, targetId, reasonCode], properties: {targetType: {type: string, enum: [post, comment, user]}, targetId: {type: string, format: uuid}, reasonCode: {type: string, enum: [spam, harassment, unsafe, misinformation, other]}, details: {type: string, maxLength: 1000}}}}}}
+      responses: {'201': {description: Báo cáo đã tiếp nhận}}
+  /moderation/reports:
+    get:
+      tags: [Moderation]
+      security: [{sessionCookie: []}]
+      parameters: [{in: query, name: status, schema: {type: string, enum: [open, in_review, actioned, dismissed]}}, {$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}]
+      responses: {'200': {description: Hàng chờ moderator}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /moderation/reports/{reportId}:
+    patch:
+      tags: [Moderation]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: reportId, required: true, schema: {type: string, format: uuid}}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [status, reason], properties: {status: {type: string, enum: [in_review, actioned, dismissed]}, reason: {type: string, minLength: 5, maxLength: 1000}}}}}
+      responses: {'200': {description: Báo cáo đã xử lý; hành động được ghi audit}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /notifications:
+    get:
+      tags: [Notifications]
+      security: [{sessionCookie: []}]
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}, {in: query, name: unreadOnly, schema: {type: boolean, default: false}}]
+      responses: {'200': {description: Thông báo của người dùng hiện tại}}
+  /notifications/{notificationId}/read:
+    put:
+      tags: [Notifications]
+      security: [{sessionCookie: []}]
+      parameters: [{in: path, name: notificationId, required: true, schema: {type: string, format: uuid}}]
+      responses: {'204': {description: Đã đánh dấu đã đọc}}
+components:
+  securitySchemes:
+    sessionCookie: {type: apiKey, in: cookie, name: gisland_session}
+  parameters:
+    Limit: {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 50, default: 20}}
+    Cursor: {in: query, name: cursor, schema: {type: string}}
+  responses:
+    BadRequest: {description: Yêu cầu không hợp lệ}
+    Unauthorized: {description: Chưa xác thực}
+    Forbidden: {description: Không đủ quyền}
+    NotFound: {description: Không tìm thấy tài nguyên}
+    Conflict: {description: Trùng tài khoản hoặc xung đột trạng thái}
+    RateLimited: {description: Vượt giới hạn; phản hồi có Retry-After}
+    ValidationError: {description: Dữ liệu không hợp lệ, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  schemas:
+    RegisterAccepted:
+      type: object
+      required: [message]
+      properties:
+        message: {type: string, example: 'Nếu email hợp lệ, hướng dẫn xác minh sẽ được gửi.'}
+    GenericAccepted:
+      type: object
+      required: [message]
+      properties:
+        message: {type: string, example: 'Nếu tài khoản tồn tại, hướng dẫn sẽ được gửi.'}
+    VerifyEmailRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token: {type: string, minLength: 32, maxLength: 512}
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: {type: string, format: email, maxLength: 254}
+        password: {type: string, minLength: 1, maxLength: 128}
+    ForgotPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: {type: string, format: email, maxLength: 254}
+    ResetPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [token, newPassword]
+      properties:
+        token: {type: string, minLength: 32, maxLength: 512}
+        newPassword: {type: string, minLength: 12, maxLength: 128}
+    LoginResponse:
+      type: object
+      required: [user, expiresAt]
+      properties:
+        user: {$ref: '#/components/schemas/PublicProfile'}
+        expiresAt: {type: string, format: date-time}
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, username, displayName]
+      properties:
+        email: {type: string, format: email, maxLength: 254}
+        password: {type: string, minLength: 12, maxLength: 128}
+        username: {type: string, pattern: '^[a-zA-Z0-9_]{3,30}$'}
+        displayName: {type: string, minLength: 1, maxLength: 80}
+    ProfilePatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        displayName: {type: string, maxLength: 80}
+        bio: {type: [string, 'null'], maxLength: 500}
+        locationText: {type: [string, 'null'], maxLength: 120}
+        websiteUrl: {type: [string, 'null'], format: uri}
+        avatarMediaId: {type: [string, 'null'], format: uuid}
+        privacy: {type: string, enum: [public, private]}
+    MyProfile:
+      allOf:
+        - {$ref: '#/components/schemas/PublicProfile'}
+        - type: object
+          required: [email, privacy, locationText, websiteUrl, avatarMediaId]
+          properties:
+            email: {type: string, format: email}
+            privacy: {type: string, enum: [public, private]}
+            avatarMediaId: {type: [string, 'null'], format: uuid}
+            locationText: {type: [string, 'null'], maxLength: 120}
+            websiteUrl: {type: [string, 'null'], format: uri}
+            emailVerifiedAt: {type: [string, 'null'], format: date-time}
+    PublicProfile:
+      type: object
+      required: [id, username, displayName, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        username: {type: string, pattern: '^[a-zA-Z0-9_]{3,30}$'}
+        displayName: {type: string, minLength: 1, maxLength: 80}
+        bio: {type: [string, 'null']}
+        avatarUrl: {type: [string, 'null'], format: uri}
+        createdAt: {type: string, format: date-time}
+    MediaUploadIntent:
+      type: object
+      required: [mediaId, uploadUrl, method, headers, expiresAt]
+      properties:
+        mediaId: {type: string, format: uuid}
+        uploadUrl: {type: string, format: uri}
+        method: {type: string, enum: [PUT, POST]}
+        headers: {type: object, additionalProperties: {type: string}}
+        expiresAt: {type: string, format: date-time}
+    MediaStatus:
+      type: object
+      required: [id, status]
+      properties:
+        id: {type: string, format: uuid}
+        status: {type: string, enum: [pending, processing, ready, rejected]}
+        altText: {type: [string, 'null'], maxLength: 300}
+    VehicleInput:
+      type: object
+      additionalProperties: false
+      required: [vehicleType, title]
+      properties:
+        vehicleType: {type: string, example: car}
+        title: {type: string, minLength: 1, maxLength: 120}
+        make: {type: [string, 'null'], maxLength: 80}
+        model: {type: [string, 'null'], maxLength: 100}
+        year: {type: [integer, 'null'], minimum: 1886, maximum: 2100}
+        description: {type: [string, 'null'], maxLength: 2000}
+        attributes: {type: object, additionalProperties: {type: [string, number, boolean, 'null']}, maxProperties: 12, description: 'Server cho phép các khóa theo vehicleType: motorcycle(displacementCc, engineType, color, modifications); car(bodyStyle, fuelType, transmission, color, driveType); bicycle(bicycleType, frameMaterial, frameSize, color); truck(payloadKg, axleCount, truckBody, fuelType); offroad(suspension, drivetrain, tireSize, modifications); electric(batteryKwh, rangeKm, motorPowerKw, chargingConnector); classic(manufacturingYear, origin, restorationStatus); other(category, notes).'}
+        visibility: {type: string, enum: [public, followers, private]}
+        coverMediaId: {type: [string, 'null'], format: uuid}
+    VehiclePatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        vehicleType: {type: string, example: car}
+        title: {type: string, minLength: 1, maxLength: 120}
+        make: {type: [string, 'null'], maxLength: 80}
+        model: {type: [string, 'null'], maxLength: 100}
+        year: {type: [integer, 'null'], minimum: 1886, maximum: 2100}
+        description: {type: [string, 'null'], maxLength: 2000}
+        attributes: {type: object, additionalProperties: {type: [string, number, boolean, 'null']}, maxProperties: 12, description: 'Server cho phép các khóa theo vehicleType; xem DATA-DICTIONARY.md.'}
+        visibility: {type: string, enum: [public, followers, private]}
+        coverMediaId: {type: [string, 'null'], format: uuid}
+    VehicleType:
+      type: object
+      required: [slug, name, sortOrder]
+      properties:
+        slug: {type: string, pattern: '^[a-z0-9-]{1,40}$'}
+        name: {type: string, maxLength: 80}
+        sortOrder: {type: integer}
+    VehicleTypeList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/VehicleType'}}
+    Vehicle:
+      allOf:
+        - {$ref: '#/components/schemas/VehicleInput'}
+        - type: object
+          required: [id, ownerId, createdAt]
+          properties: {id: {type: string, format: uuid}, ownerId: {type: string, format: uuid}, createdAt: {type: string, format: date-time}, updatedAt: {type: string, format: date-time}}
+    VehicleList:
+      type: object
+      properties: {items: {type: array, items: {$ref: '#/components/schemas/Vehicle'}}, nextCursor: {type: [string, 'null']}}
+    PostInput:
+      type: object
+      required: [body]
+      properties:
+        body: {type: string, maxLength: 3000}
+        vehicleId: {type: [string, 'null'], format: uuid}
+        mediaIds: {type: array, maxItems: 10, items: {type: string, format: uuid}}
+        tags: {type: array, maxItems: 10, items: {type: string, maxLength: 40}}
+        visibility: {type: string, enum: [public, followers, private]}
+    Post:
+      allOf:
+        - {$ref: '#/components/schemas/PostInput'}
+        - type: object
+          properties: {id: {type: string, format: uuid}, author: {$ref: '#/components/schemas/PublicProfile'}, likeCount: {type: integer}, commentCount: {type: integer}, createdAt: {type: string, format: date-time}}
+    PostList:
+      type: object
+      properties: {items: {type: array, items: {$ref: '#/components/schemas/Post'}}, nextCursor: {type: [string, 'null']}}
+    Problem:
+      type: object
+      properties: {type: {type: string, format: uri}, title: {type: string}, status: {type: integer}, detail: {type: string}, requestId: {type: string}, fieldErrors: {type: array, items: {type: object, properties: {field: {type: string}, code: {type: string}, message: {type: string}}}}}

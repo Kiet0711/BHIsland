@@ -1,0 +1,27 @@
+{
+  "name": "gisland",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "Front_End",
+    "Back_End"
+  ],
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace=@gisland/frontend",
+    "build": "npm run build --workspace=@gisland/frontend",
+    "check": "npm run check --workspace=@gisland/frontend && npm run check --workspace=@gisland/backend",
+    "db:start": "node Back_End/scripts/start-db.mjs",
+    "db:migrate": "npm run migrate --workspace=@gisland/backend",
+    "api:types": "openapi-typescript Document/GIsland-OpenAPI.yaml -o Front_End/src/lib/api/generated.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.10.1"
+  },
+  "allowScripts": {
+    "argon2@0.44.0": true,
+    "sharp@0.35.5": true
+  }
+}
